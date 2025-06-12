@@ -4,7 +4,6 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import requests
 from bs4 import BeautifulSoup
 
-# --- LINE 인증 정보 (여기에 직접 입력) ---
 LINE_CHANNEL_ACCESS_TOKEN = 'qW8jaVO+EKprbz/y6bPwMAcWhGLCgTS822GZGtJ3vjZsmEvH/+tPRP0BWTWktTDnuWjyfjmltnt86SdxSiZIsXdNwPVwjYRVLOz+UqWVoPBzZYMSeCpwErR7Urfk+szctzz01Tw6lxpeUOU88LvH1wdB04t89/1O/w1cDnyilFU='
 LINE_CHANNEL_SECRET = 'e042abfbb258184b5f014609d19dc52b'
 
@@ -14,42 +13,31 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 app = Flask(__name__)
 
 def get_next_yamanote():
-    url = "https://transit.yahoo.co.jp/station/top/28561/"  # 타카다노바바역
+    url = "https://transit.yahoo.co.jp/timetable/22790/7170?ym=202506&d=12&hh=17&pref=13"
     headers = {
         "User-Agent": "Mozilla/5.0"
     }
     res = requests.get(url, headers=headers)
     soup = BeautifulSoup(res.content, "html.parser")
 
-    # 새로운 구조: "発車時刻" 섹션을 기준으로 파싱
-    result = []
-    for section in soup.select("div.timelist"):
-        line_name = section.select_one("h3").text if section.select_one("h3") else ""
-        if "山手線" not in line_name:
-            continue
+    times = []
+    for td in soup.select("td.time"):
+        time_text = td.get_text(strip=True)
+        if time_text:
+            times.append(f"🕒 {time_text}")
 
-        for li in section.select("li"):
-            time_tag = li.select_one("div.time")
-            dest_tag = li.select_one("div.destination")
-            if not time_tag or not dest_tag:
-                continue
-            time_text = time_tag.get_text(strip=True)
-            dest_text = dest_tag.get_text(strip=True)
-
-            if "新宿" in dest_text:
-                result.append(f"🕒 {time_text} - {dest_text}")
-
-    return result[:3] if result else ["도착 정보가 없습니다."]
+    return times[:5] if times else ["도착 정보가 없습니다."]
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    signature = request.headers["X-Line-Signature"]
+    signature = request.headers.get("X-Line-Signature", "")
     body = request.get_data(as_text=True)
 
     try:
         handler.handle(body, signature)
     except Exception as e:
         print(f"[ERROR] {e}")
+        return "Bad Request", 400
 
     return "OK"
 
