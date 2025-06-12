@@ -15,21 +15,31 @@ app = Flask(__name__)
 
 def get_next_yamanote():
     url = "https://transit.yahoo.co.jp/station/top/28561/"  # 타카다노바바역
-    res = requests.get(url)
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+    res = requests.get(url, headers=headers)
     soup = BeautifulSoup(res.content, "html.parser")
 
-    trains = []
-    for row in soup.select("table.timeTable tr"):
-        cells = row.find_all("td")
-        if len(cells) < 2:
+    # 새로운 구조: "発車時刻" 섹션을 기준으로 파싱
+    result = []
+    for section in soup.select("div.timelist"):
+        line_name = section.select_one("h3").text if section.select_one("h3") else ""
+        if "山手線" not in line_name:
             continue
-        time_text = cells[0].get_text(strip=True)
-        dest_text = cells[1].get_text(strip=True)
 
-        if "山手線" in row.text and "新宿" in dest_text:
-            trains.append(f"🕒 {time_text} - {dest_text}")
+        for li in section.select("li"):
+            time_tag = li.select_one("div.time")
+            dest_tag = li.select_one("div.destination")
+            if not time_tag or not dest_tag:
+                continue
+            time_text = time_tag.get_text(strip=True)
+            dest_text = dest_tag.get_text(strip=True)
 
-    return trains[:3] if trains else ["도착 정보가 없습니다."]
+            if "新宿" in dest_text:
+                result.append(f"🕒 {time_text} - {dest_text}")
+
+    return result[:3] if result else ["도착 정보가 없습니다."]
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
